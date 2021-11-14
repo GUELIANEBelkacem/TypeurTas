@@ -343,6 +343,8 @@ object Tpr {
 		case Nat => Nat
 		case Lst(a) => Lst(substitueType(a,v,newT))
 		case EmptyT=>EmptyT
+		case RefT(x)  => RefT( substitueType(x, v, newT) )
+		case Unit => Unit  
 	}
 		
 	
@@ -430,6 +432,24 @@ object Tpr {
       genere_equa (e1,Vari(s1)) 
       genere_equa (e2,Vari(s2))
       equas += (equa( ty, Vari(s2) ))
+     
+    case Ref(x) =>
+      var s = newVar()
+      equas += (equa( ty, RefT(Vari(s))))
+      genere_equa(x, Vari(s))
+      
+    case Deref(x) =>
+      var s = newVar()
+      genere_equa (x, RefT(Vari(s)))
+      equas += (equa( ty, Vari(s)))
+          
+    case Assign(x, y) =>
+      var s = newVar()
+      genere_equa(y, Vari(s))
+      genere_equa(x, RefT(Vari(s)))
+      equas += (equa( ty, Unit))
+      
+    case PUnit() => equas += (equa( ty, Unit))
   }
   
   
@@ -514,6 +534,18 @@ object Tpr {
          unification(but, idx)
          
        case equa(_, EmptyT) | equa(EmptyT, _) => throw new unificationException("Empty List Error")
+         
+       case equa(RefT(t1), RefT(t2)) =>
+         var newEq = (equa(t1, t2))
+         var equ:ListBuffer[equa] = new ListBuffer[equa]()
+         equ += newEq
+         equas = equas.slice(0, idx) ++ equ ++ equas.slice(idx+1, equas.size)
+         unification(but, idx)
+         
+       case equa(RefT(_), _) => throw new unificationException("Ref to Var matching")
+       
+         
+       case equa(_, RefT(_)) => throw new unificationException("Ref to Var matching")
          
        
        
