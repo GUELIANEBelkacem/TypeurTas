@@ -20,7 +20,11 @@ object Tpr {
 	case class PF(x:Pterm, f:Pterm) extends Pterm
 	case class IfZero(x:Pterm, y:Pterm, z:Pterm) extends Pterm
 	case class IfEmpty(x:Pterm, y:Pterm, z:Pterm) extends Pterm
-	
+	case class Ref( x : Pterm) extends Pterm
+	case class Deref( x : Pterm) extends Pterm
+	case class Assign ( x : Pterm, y : Pterm) extends Pterm
+	case class PUnit() extends Pterm
+	case class Rho(x:Int) extends Pterm
     	//List--------------------------------------------------
       case object EmptyL extends Pterm
       case object NilL extends Pterm
@@ -46,6 +50,8 @@ object Tpr {
 	case object Nat extends Ptype
 	case class Lst(e:Ptype) extends Ptype
 	case object EmptyT extends Ptype
+	case object Unit extends Ptype
+	case class RefT( x : Ptype) extends Ptype
 	//--------------------------------------------------------------------------------------
 	
 	
@@ -66,6 +72,8 @@ object Tpr {
 	var equas:ListBuffer[equa] = new ListBuffer[equa]()
 	var gcpt = 0
 	var vcpt = 0
+  var tab:Map[Int,Pterm] = Map()
+	var tabcpt = 0
 	
 	class varNotFoundException(s:String) extends Exception(s){}
   class unificationException(s:String) extends Exception(s){}
@@ -92,6 +100,10 @@ object Tpr {
 			case IfEmpty(x,y,z) => "(if(" + print_term(x)+" == []) then: (" + print_term(y) + ")  else: (" + print_term(z) +"))"
 			case PF(x,f) => "(def x=f(x), x: "+print_term(x)+", f: " + print_term(f) +")"
 			case LetIn(x,e1,e2) => "(let "+x+"= "+print_term(e1)+" in " + print_term(e2) +")"
+			case Ref(x) => "(ref "+(print_term(x))+")"
+			case Deref(x) => "!("+print_term(x)+")"
+			case Assign(x, y) => print_term(x)+" := "+print_term(y)
+			case PUnit() => "()"
 	}
 
 
@@ -101,6 +113,8 @@ object Tpr {
 			case Nat => "Nat"
 			case Lst(a) => "["+print_type(a)+"]"
 			case EmptyT => "[]"
+			case RefT(x) => "( RefT("+ print_type(x) + "))"
+			case Unit => "Unit"
 		
 	}
 
@@ -147,6 +161,10 @@ object Tpr {
 			  //if(remp.contains(x)) throw new evaluationException("Var Already Exists")
 			  remp += (x ->x)
 			  LetIn(x,barendregt(e1),barendregt(e2))
+			case Ref(x) => Ref(barendregt(x))
+			case Deref(x) => Deref(barendregt(x))
+			case Assign(x, y) => Assign(barendregt(x), barendregt(y))
+			case PUnit() => PUnit()
 	}
 	
 	
@@ -166,12 +184,17 @@ object Tpr {
 			case IfEmpty(x,y,z) => IfEmpty(instantie(x, vn, a), instantie(y, vn, a), instantie(z, vn, a) )
 			case PF(x,f) => PF(instantie(x, vn, a),instantie(f, vn, a))
 			case LetIn(x,e1,e2) => LetIn(x,instantie(e1, vn, a),instantie(e2, vn, a))
+			case Ref(x) => Ref(instantie(x, vn, a))
+			case Deref(x) => Deref(instantie(x, vn, a))
+			case Assign(x, y) => Assign(instantie(x, vn, a), instantie(y, vn, a))
+			case PUnit() => PUnit()
 	 }
 	 
 	 
 	 // make the pattern matchings stricter by only considering the Var(x) and throwing errors otherwise 
 	 def red(l: Pterm) : Pterm = {
 	    var ll = barendregt(l)
+	    
 	    
 	    return ll match{
   	   	case Var(x) => Var(x)
@@ -236,6 +259,27 @@ object Tpr {
   			case LetIn(x,e1,e2) => 
   			  var pf = LetIn(x,red(e1),red(e2))
   			  red(instantie(e2,x,e1))
+  			  
+  			case Ref(x) =>
+  			  tabcpt = tabcpt + 1
+  			  tab = tab + (tabcpt->red(x))
+  			  Rho(tabcpt)
+  			  
+  			case Deref(x) =>
+  			  var af = red(x)
+  			  af match{
+  			    case Rho(i) => tab(i)
+  			    case _ => Deref(af)
+  			  }
+  			  
+  			case Assign(x,y) =>
+  			  var af = Assign(red(x), red(y))
+  			  af match{
+  			    case Assign(Rho(i), yy) => 
+  			      tab = tab + (i->yy)
+  			      PUnit()
+  			    case _ => af
+  			  }
 	    }
 	 }
 	
@@ -543,6 +587,8 @@ object Tpr {
       println(inference( App(Abs("x", Add(Var("x"), N(44))),  N(2)  )  ))
       println(inference( App(Abs ("x", IfZero(Var("x"), N(4), N(99) )), N(0))   ))
       println(inference( App(Abs ("x", IfZero(Var("x"), N(4), N(99) )), N(1))   ))
+      
+      println(inference( LetIn("a", Ref(N(1)), Add(Deref(Var("a")), Deref(Var("a"))))))
       
       
       
